@@ -226,11 +226,11 @@ def _build_tileset_tiled(sim: dict, root_node: _OctreeNode) -> dict:
     R = np.array(sim["rotation"], dtype=np.float64).reshape(3, 3)
     t = np.array(sim["translation"], dtype=np.float64)
 
-    # Similarity matrix + Y/Z flip to go from 3DGS convention to ECEF
+    # Similarity matrix: COLMAP world space → ECEF (no Y/Z flip needed —
+    # the flip was for LFS visualizer-world convention, not COLMAP space)
     M = np.eye(4, dtype=np.float64)
     M[:3, :3] = s * R
     M[:3, 3]  = t
-    M = M @ np.diag([1.0, -1.0, -1.0, 1.0])
 
     pmin = root_node.pmin
     pmax = root_node.pmax
