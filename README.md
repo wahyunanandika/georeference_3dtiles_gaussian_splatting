@@ -266,10 +266,10 @@ viewer.screenSpaceEventHandler.setInputAction(async (click) => {
 
 | Metric | dozeri83 LFS plugin | This pipeline |
 |---|---|---|
-| Cesium vertical offset vs terrain | not measured directly* | **+0.27m** ✅ |
+| Cesium vertical offset vs terrain | not measured directly* | **+0.27m** |
 | Splat alt (Cesium) | ~910–1594m (bbox center 1594m) | 798.82m |
 | Terrain alt (Cesium, sampled) | not measured | 798.55m |
-| Horizontal error vs GPS PPK | ~71m (ΔN=+53.7m, ΔE=+47.3m) ❌ | ~0.076m ✅ |
+| Horizontal error vs GPS PPK | ~71m (ΔN=+53.7m, ΔE=+47.3m)  | ~0.076m  |
 | GPS RMSE | 0.076m | 0.076m |
 | LFS required | Yes | **No** |
 | Reproducible | Depends on LFS version | Always same |
