@@ -1,3 +1,7 @@
+# Adapted from dozeri83/geo-register-plugin
+# https://github.com/dozeri83/geo-register-plugin
+# Original licensed under GPL-3.0
+# Modifications by wahyunanandika — June 2026
 """Parse Agisoft Metashape camera XML exports.
 
 Extracts per-camera GPS references, scene-space camera centres, and the

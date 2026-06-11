@@ -1,3 +1,7 @@
+# Adapted from dozeri83/geo-register-plugin
+# https://github.com/dozeri83/geo-register-plugin
+# Original licensed under GPL-3.0
+# Modifications by wahyunanandika — June 2026
 """Export a geo-registered 3DGS PLY to 3D Tiles 1.1 (SPZ-compressed GLB).
 
 Usage (CLI)
