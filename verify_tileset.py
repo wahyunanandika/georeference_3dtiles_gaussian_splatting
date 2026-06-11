@@ -15,7 +15,6 @@ from pathlib import Path
 
 
 def ecef_to_lla(x, y, z):
-    import math
     a = 6_378_137.0
     e2 = 0.00669437999014
     lon = math.degrees(math.atan2(y, x))
@@ -59,21 +58,28 @@ def main():
 
     ge_root = ts.get("geometricError", 0)
     box     = ts["root"]["boundingVolume"]["box"]
+    cx, cy, cz = box[0], box[1], box[2]
     hx, hy, hz = box[3], box[7], box[11]
     diag    = math.sqrt((hx*2)**2 + (hy*2)**2 + (hz*2)**2)
     refine  = ts["root"].get("refine", "?")
     n_children = len(ts["root"].get("children", []))
 
+    import numpy as np
     T = ts["root"].get("transform", [])
     if T:
-        import numpy as np
-        M   = np.array(T).reshape(4, 4).T
+        M        = np.array(T).reshape(4, 4).T
+        scale_m  = float(np.linalg.norm(M[:3, 0]))
+        # Use bbox center (in tile local space) transformed to ECEF for altitude check
+        p_box    = np.array([cx, cy, cz, 1.0])
+        ecef_box = M @ p_box
+        lat, lon, alt = ecef_to_lla(*ecef_box[:3])
+        # Origin LLA (translation vector) for display only
         tx, ty, tz = M[0, 3], M[1, 3], M[2, 3]
-        scale_m    = float(np.linalg.norm(M[:3, 0]))
-        lat, lon, alt = ecef_to_lla(tx, ty, tz)
+        lat_orig, lon_orig, alt_orig = ecef_to_lla(tx, ty, tz)
     else:
         scale_m = 1.0
         lat = lon = alt = 0.0
+        lat_orig = lon_orig = alt_orig = 0.0
 
     def c(label, ok, detail=""):
         nonlocal passed, total
@@ -104,7 +110,7 @@ def main():
       0 < alt < 5000,
       f"{alt:.1f} m")
 
-    print(f"\n  Scene origin: lat={lat:.5f}, lon={lon:.5f}, alt={alt:.1f} m")
+    print(f"\n  Bbox center:  lat={lat:.5f}, lon={lon:.5f}, alt={alt:.1f} m")
 
     # ── GLB tiles ─────────────────────────────────────────────────────────────
     tiles = sorted(out_dir.glob("tile_*.glb"))
@@ -130,8 +136,8 @@ def main():
           "KHR_gaussian_splatting" in ext)
         node_matrix = gltf["nodes"][0].get("matrix", [])
         c("Y-up node matrix",
-          len(node_matrix) == 16 and abs(node_matrix[5] - (-1.0)) < 1e-6,
-          str(node_matrix[5] if len(node_matrix) >= 6 else "?"))
+          len(node_matrix) == 16 and abs(node_matrix[6] - (-1.0)) < 1e-6,
+          str(node_matrix[6] if len(node_matrix) >= 7 else "?"))
 
     # ── Summary ───────────────────────────────────────────────────────────────
     print(f"\n── Summary ───────────────────────────────────")
