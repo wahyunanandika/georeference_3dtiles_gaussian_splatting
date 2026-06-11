@@ -1,156 +1,131 @@
 # gs_georef
 
-Standalone Python pipeline — **no LichtFeld Studio required** — that converts a
-3D Gaussian Splatting PLY file into georeferenced **3D Tiles 1.1** (SPZ-compressed)
-ready for **Cesium ion** or any CesiumJS-based viewer.
+Standalone Python pipeline for converting 3D Gaussian Splatting reconstructions into georeferenced 3D Tiles 1.1 (SPZ-compressed) without requiring LichtFeld Studio.
 
-**Confirmed result on Taman Kota Cimahi dataset: +0.27m offset vs terrain in Cesium ion.**
+The pipeline estimates a similarity transform directly from COLMAP camera centres and GPS camera references exported from Metashape, then exports the Gaussian Splat scene as Cesium-compatible 3D Tiles.
 
----
+## Features
 
-## Based on / Credits
-
-This pipeline is heavily inspired by and derived from
-**[dozeri83/geo-register-plugin](https://github.com/dozeri83/geo-register-plugin)** —
-a LichtFeld Studio plugin for georeferencing 3D Gaussian Splat scenes.
-
-Core components inherited from dozeri83:
-
-| Component | Origin |
-|---|---|
-| `spz_encode.py` | Pure-Python SPZ v3 encoder, mirrors Niantic's load-spz.cc byte-for-byte |
-| GLB writer (`_write_spz_glb`) | KHR_gaussian_splatting + KHR_gaussian_splatting_compression_spz_2 structure |
-| Umeyama + RANSAC solver | robust_umeyama implementation |
-| Metashape XML parser | parse_metashape_xml, GEOGCS/EPSG:4326 chunk handling |
-| 3D Tiles 1.1 structure | tileset.json schema, geometricError, refine semantics |
-
-**Thank you dozeri83** for the original plugin that made this work possible.
+* Direct COLMAP → ECEF georeferencing
+* No LichtFeld Studio dependency
+* SPZ-compressed Gaussian Splats
+* 3D Tiles 1.1 output
+* Cesium ion compatible
+* Octree-based spatial tiling
+* Optional sparse-point validation using COLMAP `points3D.bin`
+* Fully reproducible command-line workflow
 
 ---
 
-## What Changed and Why
+## Tested Result
 
-### 1. Removed LichtFeld Studio dependency
+Dataset: Taman Kota Cimahi, Indonesia
 
-**dozeri83 original:** requires LFS to be running; similarity transform is solved
-from `node.camera_R/T` (LFS camera API) → scene-space positions.
+* 4,999,683 Gaussian splats
+* 341 GPS PPK cameras
+* GPS RMSE: 0.076 m
+* Cesium terrain offset: +0.27 m
+* 463 octree tiles
 
-**This pipeline:** reads COLMAP `images.bin` directly. No LFS needed.
+---
 
-**Why:** LFS v0.5.2 (PR #1066) introduced a split between `visualizer-world` and
-`data-world` coordinate conventions. `node.world_transform` no longer reliably
-returns the data-world transform needed for PLY export. Additionally, LFS cannot
-load COLMAP cameras and a PLY splat simultaneously (mutually exclusive modes),
-making it impossible to get `node.world_transform` from PLY converter mode.
+## Pipeline Overview
 
-### 2. Direct COLMAP → ECEF transform (no scene-space intermediate)
-
-**dozeri83 original:** solve similarity from LFS camera API positions (Metashape
-scene space, Z ≈ 0–2) → ECEF.
-
-**This pipeline:** solve directly from COLMAP camera centres (from `images.bin`,
-Z ≈ 900–920m for Cimahi) → GPS ECEF (from Metashape XML `<reference>` tags).
-
-**Why:** PLY splats and COLMAP camera centres share the same coordinate space.
-Solving directly skips the scene-space intermediate and eliminates the need for
-`node.world_transform` (W). Result: +0.27m terrain offset vs ~677m floating in
-the original LFS approach.
-
-### 3. Removed `diag(1, -1, -1)` flip from tileset matrix
-
-**dozeri83 original:** applies `M = M @ diag(1, -1, -1, 1)` to convert from LFS
-visualizer-world (Y-up, Z-backward) to ECEF.
-
-**This pipeline:** flip removed entirely.
-
-**Why:** COLMAP output space has a different axis convention from LFS world-space.
-Applying the LFS flip to COLMAP positions inverts the Z axis, causing bbox center
-altitude to become negative (~-781m). Without the flip, terrain altitude is correct.
-
-### 4. Added octree tiling
-
-**dozeri83 original:** single-tile export — all splats in one GLB file.
-
-**This pipeline:** octree spatial partitioning → hundreds of leaf tiles.
-
-**Why:** a single tile with 5M splats produces a very large `geometricError` on a
-leaf node. Cesium computes high SSE but cannot refine → tile skipped entirely.
-Octree splitting with correct per-node `geometricError` (0.0 for leaves, bbox
-diagonal for internal nodes) makes Cesium render tiles progressively.
-
-### 5. Fixed `geometricError` (no scale multiplication)
-
-**dozeri83 original (initial):** `geom_err_m = scene_diagonal * scale`
-
-**This pipeline:** `geom_err_m = float(np.linalg.norm(pmax - pmin))`
-
-**Why:** `geometricError` is in local tile space; the transform matrix handles
-the coordinate change. Multiplying by scale produced values ~12.79× too large.
-
-### 6. Fixed `refine: "ADD"` → `"REPLACE"`
-
-**Why:** `ADD` requires parent LOD splats + child splats. For single-level splat
-exports without an LOD hierarchy, `REPLACE` is the only correct option.
-
-### 7. Added `points3D.bin` reader (optional verification)
-
-Reads COLMAP sparse points to verify terrain altitude after applying the similarity
-transform — confirms the transform is correct before the full tile export.
+```text
+COLMAP images.bin
+        │
+        ▼
+ Camera Centres
+        │
+        ├────────────┐
+        ▼            │
+Similarity Solver    │
+        ▲            │
+        │            │
+Metashape GPS Cameras
+        │
+        ▼
+Transform Matrix
+        │
+        ▼
+Gaussian Splat PLY
+        │
+        ▼
+Octree Tiling
+        │
+        ▼
+SPZ Encoding
+        │
+        ▼
+3D Tiles 1.1
+        │
+        ▼
+Cesium ion / CesiumJS
+```
 
 ---
 
 ## Requirements
 
 ```bash
-pip install -r requirements.txt  # numpy only
+pip install -r requirements.txt
+```
+
+Current dependency:
+
+```text
+numpy >= 1.24
 ```
 
 ---
 
 ## Inputs
 
-| File | Description |
-|---|---|
-| `splat.ply` | Binary little-endian 3DGS PLY from COLMAP training |
-| `sparse/0/images.bin` | COLMAP sparse reconstruction cameras |
-| `camera_export.xml` | Metashape camera export — chunk CRS **must** be WGS84 / EPSG:4326 |
-| `sparse/0/points3D.bin` | *(optional)* COLMAP sparse points — for terrain altitude verification |
-
-**Metashape export:** File → Export → Export Cameras → set chunk coordinate system
-to **WGS84 (EPSG:4326)**. Camera label stems in `images.bin` must match XML labels.
+| File                  | Description                                 |
+| --------------------- | ------------------------------------------- |
+| splat.ply             | Binary Gaussian Splat PLY                   |
+| sparse/0/images.bin   | COLMAP camera reconstruction                |
+| camera_export.xml     | Metashape camera export (WGS84 / EPSG:4326) |
+| sparse/0/points3D.bin | Optional sparse point cloud for validation  |
 
 ---
 
 ## Usage
 
-### Step 1 — Solve similarity transform
+### 1. Solve Similarity Transform
 
 ```bash
 python solve_transform.py \
-    --images-bin  sparse/0/images.bin \
-    --metashape   camera_export.xml \
-    --output      similarity_transform.json
+    --images-bin sparse/0/images.bin \
+    --metashape camera_export.xml \
+    --output similarity_transform.json
+```
 
-# With terrain altitude verification:
+Optional terrain verification:
+
+```bash
 python solve_transform.py \
-    --images-bin  sparse/0/images.bin \
-    --metashape   camera_export.xml \
-    --points3d    sparse/0/points3D.bin \
-    --output      similarity_transform.json
+    --images-bin sparse/0/images.bin \
+    --metashape camera_export.xml \
+    --points3d sparse/0/points3D.bin \
+    --output similarity_transform.json
 ```
 
-Expected output:
-```
-  343 cameras read.
-  341 GPS cameras loaded.
-  68,502 sparse points read.
-  Matched 341 cameras (COLMAP ↔ Metashape XML)
-  Solver: 341/341 inliers, RMSE=0.0762 m
-  Camera centroid → lat=-6.87067, lon=107.55432, alt=917.19 m (drone altitude)
-  Sparse points → terrain alt: 790.6–839.2 m (mean=812.8 m)
+Example output:
+
+```text
+343 cameras read
+341 GPS cameras loaded
+68,502 sparse points read
+
+Matched 341 cameras
+RMSE = 0.0762 m
+Scale = 1.00000000
 ```
 
-### Step 2 — Export 3D Tiles
+---
+
+### 2. Export 3D Tiles
 
 ```bash
 python tiles_exporter.py \
@@ -159,172 +134,96 @@ python tiles_exporter.py \
     output_tiles/
 ```
 
-Options: `--max-sh-degree 0|1|2|3`, `--max-splats-per-tile INT`,
-`--min-tile-size FLOAT`, `--fraction FLOAT`
+Options:
 
-### Step 3 — Verify
+| Parameter             | Description                  |
+| --------------------- | ---------------------------- |
+| --max-sh-degree       | Maximum SH degree            |
+| --max-splats-per-tile | Override auto tiling         |
+| --min-tile-size       | Minimum octree cell size     |
+| --fraction            | Subsample splats for testing |
+
+---
+
+### 3. Verify Export
 
 ```bash
 python verify_tileset.py output_tiles/
 ```
 
-### Step 4 — Upload to Cesium ion
+Example:
 
-Add data → 3D Tiles → upload `output_tiles/` folder.
+```text
+OK geometricError
+OK refine == REPLACE
+OK altitude range
+OK KHR_gaussian_splatting
 
-Once uploaded, use this Sandcastle snippet to render and measure altitude offset.
-Replace `ASSET_ID` and `defaultAccessToken` with your values:
-
-```javascript
-const ASSET_ID = 0; // <- ganti ini
-
-Cesium.Ion.defaultAccessToken = "your_token_here"; // <- token kamu
-
-const viewer = new Cesium.Viewer("cesiumContainer", {
-  terrain: Cesium.Terrain.fromWorldTerrain(),
-});
-
-const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(ASSET_ID);
-viewer.scene.primitives.add(tileset);
-await viewer.zoomTo(tileset);
-
-// Optional: raise tileset slightly if splats clip into terrain
-// tileset.modelMatrix = Cesium.Matrix4.multiplyByTranslation(
-//   tileset.modelMatrix,
-//   new Cesium.Cartesian3(0, 0, 5),
-//   new Cesium.Matrix4()
-// );
-
-const info = document.createElement("div");
-info.style.cssText = `
-  position:absolute; top:10px; left:10px; z-index:999;
-  background:rgba(0,0,0,0.75); color:#fff;
-  font:13px monospace; padding:12px 16px; border-radius:6px;
-  max-width:360px; line-height:1.6;
-`;
-info.innerHTML = "Click on the splat to measure altitude offset";
-document.getElementById("cesiumContainer").appendChild(info);
-
-viewer.screenSpaceEventHandler.setInputAction(async (click) => {
-  const pickedPos = viewer.scene.pickPosition(click.position);
-  if (!Cesium.defined(pickedPos)) {
-    info.innerHTML = "Click directly on the splat model.";
-    return;
-  }
-
-  const cartographic = Cesium.Ellipsoid.WGS84.cartesianToCartographic(pickedPos);
-  const lat = Cesium.Math.toDegrees(cartographic.latitude);
-  const lon = Cesium.Math.toDegrees(cartographic.longitude);
-  const splatAlt = cartographic.height;
-
-  const terrainPositions = [Cesium.Cartographic.fromDegrees(lon, lat)];
-  const sampledTerrain = await Cesium.sampleTerrainMostDetailed(
-    viewer.terrainProvider,
-    terrainPositions
-  );
-  const terrainAlt = sampledTerrain[0].height;
-  const offset = splatAlt - terrainAlt;
-
-  const offsetColor = Math.abs(offset) < 30 ? "#7fff7f" : "#ff7f7f";
-  const offsetLabel = Math.abs(offset) < 5
-    ? "Near perfect"
-    : Math.abs(offset) < 25
-    ? "Likely geoid offset (~21m EGM96)"
-    : "Large offset — check transform";
-
-  info.innerHTML = `
-    <b>Clicked point</b><br>
-    Lat : ${lat.toFixed(6)}<br>
-    Lon : ${lon.toFixed(6)}<br>
-    <br>
-    <b>Altitudes (ellipsoidal WGS84)</b><br>
-    Splat alt  : <b>${splatAlt.toFixed(2)} m</b><br>
-    Terrain alt: <b>${terrainAlt.toFixed(2)} m</b><br>
-    <br>
-    <b>Offset (splat - terrain)</b><br>
-    <span style="color:${offsetColor}; font-size:16px">
-      <b>${offset >= 0 ? "+" : ""}${offset.toFixed(2)} m</b>
-    </span><br>
-    <span style="color:#aaa; font-size:11px">${offsetLabel}</span>
-  `;
-
-  viewer.entities.removeAll();
-  viewer.entities.add({
-    position: pickedPos,
-    point: { pixelSize: 10, color: Cesium.Color.YELLOW },
-  });
-
-}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+READY TO UPLOAD
 ```
 
 ---
 
-## Confirmed Results
+### 4. Upload to Cesium ion
 
-> Tested on a single dataset (Taman Kota Cimahi, oblique drone, 341 GPS PPK cameras).
-> Results may vary depending on dataset, COLMAP quality, and GPS accuracy.
-
-| Metric | dozeri83 LFS plugin | This pipeline |
-|---|---|---|
-| Cesium vertical offset vs terrain | not measured directly* | **+0.27m** |
-| Splat alt (Cesium) | ~910–1594m (bbox center 1594m) | 798.82m |
-| Terrain alt (Cesium, sampled) | not measured | 798.55m |
-| Horizontal error vs GPS PPK | ~71m (ΔN=+53.7m, ΔE=+47.3m)  | ~0.076m  |
-| GPS RMSE | 0.076m | 0.076m |
-| LFS required | Yes | **No** |
-| Reproducible | Depends on LFS version | Always same |
-
-> \* dozeri83 vertical offset not directly measured in Cesium — estimated from bbox center
-> altitude analysis (1594m) vs GPS PPK drone altitude (~917m). Actual render offset may differ.
-> Horizontal error of ~71m (ΔN=+53.7m, ΔE=+47.3m) was verified via Python analysis against
-> GPS PPK ground truth.
+1. Open Cesium ion
+2. Add Data
+3. Select 3D Tiles
+4. Upload the generated output_tiles directory
 
 ---
 
-## File structure
+## Validation Dataset
 
-```
-gs_georef/
-├── solve_transform.py    # Step 1: solve similarity
-├── tiles_exporter.py     # Step 2: PLY → 3D Tiles
-├── verify_tileset.py     # Step 3: sanity-check
-├── colmap_reader.py      # reads images.bin + points3D.bin
-├── metashape_parser.py   # reads Metashape camera XML
-├── transform_solver.py   # Umeyama + RANSAC solver
-├── spz_encode.py         # SPZ v3 binary encoder
-├── requirements.txt
-├── README.md
-├── STANDALONE_PIPELINE.md
-└── PIPELINE_DEBUG_LOG.md
-```
+| Metric        | Value             |
+| ------------- | ----------------- |
+| Dataset       | Taman Kota Cimahi |
+| Splats        | 4,999,683         |
+| Cameras       | 341 GPS PPK       |
+| Tiles         | 463               |
+| GPS RMSE      | 0.076 m           |
+| Cesium Offset | +0.27 m           |
 
 ---
 
-## Tested on
+## Limitations
 
-| Dataset | Splats | Cameras | Tiles | GPS RMSE | Drone alt | Terrain alt | Cesium offset |
-|---|---|---|---|---|---|---|---|
-| Taman Kota Cimahi, Jawa Barat | 4,999,683 | 341 PPK | 463 | 0.076 m | 917 m | ~813 m | **+0.27m** |
+Currently validated on:
+
+* Drone photogrammetry datasets
+* Metashape camera exports
+* WGS84 (EPSG:4326)
+
+Future work:
+
+* UTM CRS support
+* Automatic CRS detection
+* Adaptive octree subdivision
+* Multi-resolution Gaussian Splat LOD
+* 3D Tiles Next / implicit tiling
 
 ---
 
-## Troubleshooting
+## Acknowledgements
 
-**"Only N matched cameras"** — stems in `images.bin` must match XML camera labels.
-Check with:
-```bash
-python -c "from colmap_reader import read_images_bin; c=read_images_bin('sparse/0/images.bin'); print(list(c)[:5])"
-python -c "from metashape_parser import parse_metashape_xml; d=parse_metashape_xml('cam.xml'); print([c['name'] for c in d['cameras'][:5]])"
-```
+This project builds upon ideas and implementations from:
 
-**"No chunk-level transform"** — re-export from Metashape with chunk CRS = WGS84 (EPSG:4326).
+* dozeri83/geo-register-plugin
+* Niantic SPZ
 
-**Large scenes (>3km)** — use `--max-splats-per-tile` to increase tile count.
+The following components were adapted from geo-register-plugin:
+
+* SPZ encoding
+* Similarity transform estimation
+* Metashape XML parsing
+* 3D Tiles export structure
+
+Special thanks to dozeri83 for creating and maintaining geo-register-plugin, which served as the foundation and inspiration for this work.
 
 ---
 
 ## License
 
-GPL-3.0 (inherited from dozeri83/geo-register-plugin).
+GPL-3.0
 
-SPZ encoder (`spz_encode.py`) derived from [Niantic spz](https://github.com/nianticlabs/spz) — MIT license.
+SPZ encoder implementation follows the Niantic SPZ specification (MIT License).
