@@ -172,13 +172,89 @@ python verify_tileset.py output_tiles/
 
 Add data → 3D Tiles → upload `output_tiles/` folder.
 
-**Optional height offset** if some splats clip into terrain:
+Once uploaded, use this Sandcastle snippet to render and measure altitude offset.
+Replace `ASSET_ID` and `defaultAccessToken` with your values:
+
 ```javascript
-tileset.modelMatrix = Cesium.Matrix4.multiplyByTranslation(
-  tileset.modelMatrix,
-  new Cesium.Cartesian3(0, 0, 5),
-  new Cesium.Matrix4()
-);
+const ASSET_ID = 0; // <- ganti ini
+
+Cesium.Ion.defaultAccessToken = "your_token_here"; // <- token kamu
+
+const viewer = new Cesium.Viewer("cesiumContainer", {
+  terrain: Cesium.Terrain.fromWorldTerrain(),
+});
+
+const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(ASSET_ID);
+viewer.scene.primitives.add(tileset);
+await viewer.zoomTo(tileset);
+
+// Optional: raise tileset slightly if splats clip into terrain
+// tileset.modelMatrix = Cesium.Matrix4.multiplyByTranslation(
+//   tileset.modelMatrix,
+//   new Cesium.Cartesian3(0, 0, 5),
+//   new Cesium.Matrix4()
+// );
+
+const info = document.createElement("div");
+info.style.cssText = `
+  position:absolute; top:10px; left:10px; z-index:999;
+  background:rgba(0,0,0,0.75); color:#fff;
+  font:13px monospace; padding:12px 16px; border-radius:6px;
+  max-width:360px; line-height:1.6;
+`;
+info.innerHTML = "Click on the splat to measure altitude offset";
+document.getElementById("cesiumContainer").appendChild(info);
+
+viewer.screenSpaceEventHandler.setInputAction(async (click) => {
+  const pickedPos = viewer.scene.pickPosition(click.position);
+  if (!Cesium.defined(pickedPos)) {
+    info.innerHTML = "Click directly on the splat model.";
+    return;
+  }
+
+  const cartographic = Cesium.Ellipsoid.WGS84.cartesianToCartographic(pickedPos);
+  const lat = Cesium.Math.toDegrees(cartographic.latitude);
+  const lon = Cesium.Math.toDegrees(cartographic.longitude);
+  const splatAlt = cartographic.height;
+
+  const terrainPositions = [Cesium.Cartographic.fromDegrees(lon, lat)];
+  const sampledTerrain = await Cesium.sampleTerrainMostDetailed(
+    viewer.terrainProvider,
+    terrainPositions
+  );
+  const terrainAlt = sampledTerrain[0].height;
+  const offset = splatAlt - terrainAlt;
+
+  const offsetColor = Math.abs(offset) < 30 ? "#7fff7f" : "#ff7f7f";
+  const offsetLabel = Math.abs(offset) < 5
+    ? "Near perfect"
+    : Math.abs(offset) < 25
+    ? "Likely geoid offset (~21m EGM96)"
+    : "Large offset — check transform";
+
+  info.innerHTML = `
+    <b>Clicked point</b><br>
+    Lat : ${lat.toFixed(6)}<br>
+    Lon : ${lon.toFixed(6)}<br>
+    <br>
+    <b>Altitudes (ellipsoidal WGS84)</b><br>
+    Splat alt  : <b>${splatAlt.toFixed(2)} m</b><br>
+    Terrain alt: <b>${terrainAlt.toFixed(2)} m</b><br>
+    <br>
+    <b>Offset (splat - terrain)</b><br>
+    <span style="color:${offsetColor}; font-size:16px">
+      <b>${offset >= 0 ? "+" : ""}${offset.toFixed(2)} m</b>
+    </span><br>
+    <span style="color:#aaa; font-size:11px">${offsetLabel}</span>
+  `;
+
+  viewer.entities.removeAll();
+  viewer.entities.add({
+    position: pickedPos,
+    point: { pixelSize: 10, color: Cesium.Color.YELLOW },
+  });
+
+}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 ```
 
 ---
@@ -190,18 +266,18 @@ tileset.modelMatrix = Cesium.Matrix4.multiplyByTranslation(
 
 | Metric | dozeri83 LFS plugin | This pipeline |
 |---|---|---|
-| Cesium vertical offset vs terrain | ~677m floating ❌ | **+0.27m** ✅ |
-| Splat alt (Cesium) | ~1594m | 798.82m |
-| Terrain alt (Cesium, sampled) | ~917m | 798.55m |
+| Cesium vertical offset vs terrain | not measured directly* | **+0.27m** ✅ |
+| Splat alt (Cesium) | ~910–1594m (bbox center 1594m) | 798.82m |
+| Terrain alt (Cesium, sampled) | not measured | 798.55m |
 | Horizontal error vs GPS PPK | ~71m (ΔN=+53.7m, ΔE=+47.3m) ❌ | ~0.076m ✅ |
 | GPS RMSE | 0.076m | 0.076m |
 | LFS required | Yes | **No** |
 | Reproducible | Depends on LFS version | Always same |
 
-> **Note on dozeri83 horizontal error:** LFS plugin scale=1.0 similarity produced ~71m
-> horizontal offset vs GPS PPK (ΔN=+53.7m, ΔE=+47.3m). The Umeyama solver converges to a
-> wrong solution because LFS camera API positions (scene space, Z≈0) are incompatible with
-> PLY coordinate space (COLMAP, Z≈780). This pipeline solves directly COLMAP→ECEF.
+> \* dozeri83 vertical offset not directly measured in Cesium — estimated from bbox center
+> altitude analysis (1594m) vs GPS PPK drone altitude (~917m). Actual render offset may differ.
+> Horizontal error of ~71m (ΔN=+53.7m, ΔE=+47.3m) was verified via Python analysis against
+> GPS PPK ground truth.
 
 ---
 
