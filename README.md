@@ -185,14 +185,23 @@ tileset.modelMatrix = Cesium.Matrix4.multiplyByTranslation(
 
 ## Confirmed Results
 
+> Tested on a single dataset (Taman Kota Cimahi, oblique drone, 341 GPS PPK cameras).
+> Results may vary depending on dataset, COLMAP quality, and GPS accuracy.
+
 | Metric | dozeri83 LFS plugin | This pipeline |
 |---|---|---|
-| Cesium offset vs terrain | ~677m floating ❌ | **+0.27m** ✅ |
+| Cesium vertical offset vs terrain | ~677m floating ❌ | **+0.27m** ✅ |
 | Splat alt (Cesium) | ~1594m | 798.82m |
-| Terrain alt (Cesium) | ~917m | 798.55m |
+| Terrain alt (Cesium, sampled) | ~917m | 798.55m |
+| Horizontal error vs GPS PPK | ~71m (ΔN=+53.7m, ΔE=+47.3m) ❌ | ~0.076m ✅ |
 | GPS RMSE | 0.076m | 0.076m |
 | LFS required | Yes | **No** |
 | Reproducible | Depends on LFS version | Always same |
+
+> **Note on dozeri83 horizontal error:** LFS plugin scale=1.0 similarity produced ~71m
+> horizontal offset vs GPS PPK (ΔN=+53.7m, ΔE=+47.3m). The Umeyama solver converges to a
+> wrong solution because LFS camera API positions (scene space, Z≈0) are incompatible with
+> PLY coordinate space (COLMAP, Z≈780). This pipeline solves directly COLMAP→ECEF.
 
 ---
 
