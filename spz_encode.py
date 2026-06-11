@@ -1,3 +1,7 @@
+# Adapted from dozeri83/geo-register-plugin
+# https://github.com/dozeri83/geo-register-plugin
+# Original licensed under GPL-3.0
+# Modifications by wahyunanandika — June 2026
 """Pure-Python SPZ v3 encoder.
 
 Mirrors Niantic's load-spz.cc byte-for-byte for the legacy v3 path that
