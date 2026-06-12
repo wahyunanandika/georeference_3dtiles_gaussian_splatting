@@ -279,6 +279,14 @@ with ground control points is recommended.
 | Taman Kota Cimahi | 4,999,683 | 341 PPK | 463 | 0.076 m |
 | ITB Ganesha, Bandung | 8,999,938 | 1,146 PPK | 698 | 0.022 m |
 
+**Taman Kota Cimahi**
+![Taman Kota Cimahi overview](assets/taman_kota_cimahi_overview.jpg)
+![Taman Kota Cimahi close-up](assets/taman_kota_cimahi_45deg.jpg)
+
+**ITB Ganesha, Bandung**
+![ITB Ganesha overview](assets/itb_overview.jpg)
+![ITB Ganesha close-up](assets/itb_ganesha_45deg.jpg)
+
 During visual inspection in Cesium ion, horizontal positioning appeared consistent
 with known geographic features. Vertical positioning was not independently verified
 against ground truth measurements.
