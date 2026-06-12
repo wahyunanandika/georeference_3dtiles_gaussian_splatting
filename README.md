@@ -191,12 +191,17 @@ const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(ASSET_ID);
 viewer.scene.primitives.add(tileset);
 await viewer.zoomTo(tileset);
 
-// Optional: raise tileset slightly if splats clip into terrain
-// tileset.modelMatrix = Cesium.Matrix4.multiplyByTranslation(
-//   tileset.modelMatrix,
-//   new Cesium.Cartesian3(0, 0, 5),
-//   new Cesium.Matrix4()
+// Optional: raise tileset vertically in local ENU space
+// Adjust the Z value (metres) to lift splats above terrain clipping
+// const center = tileset.boundingSphere.center;
+// const enuTransform = Cesium.Transforms.eastNorthUpToFixedFrame(center);
+// const translation = Cesium.Matrix4.multiplyByPoint(
+//   enuTransform,
+//   new Cesium.Cartesian3(0, 0, 2),  // <- adjust height offset here
+//   new Cesium.Cartesian3()
 // );
+// const offset = Cesium.Cartesian3.subtract(translation, center, new Cesium.Cartesian3());
+// tileset.modelMatrix = Cesium.Matrix4.fromTranslation(offset);
 
 const info = document.createElement("div");
 info.style.cssText = `
@@ -258,6 +263,7 @@ viewer.screenSpaceEventHandler.setInputAction(async (click) => {
   });
 
 }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
 ```
 
 ---
