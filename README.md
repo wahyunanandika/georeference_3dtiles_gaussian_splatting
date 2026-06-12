@@ -2,7 +2,7 @@
 
 Standalone Python pipeline for converting 3D Gaussian Splatting reconstructions into georeferenced 3D Tiles 1.1 (SPZ-compressed) ready for Cesium ion and CesiumJS — without requiring LichtFeld Studio.
 
-Validated on a real-world drone dataset with +0.27 m vertical offset relative to sampled Cesium terrain.
+Tested on two real-world drone datasets in Bandung, West Java, Indonesia. Horizontal positioning appears consistent with GPS PPK references. Further geodetic validation with independent checkpoints is recommended.
 
 ---
 
@@ -197,7 +197,7 @@ await viewer.zoomTo(tileset);
 // const enuTransform = Cesium.Transforms.eastNorthUpToFixedFrame(center);
 // const translation = Cesium.Matrix4.multiplyByPoint(
 //   enuTransform,
-//   new Cesium.Cartesian3(0, 0, 2),  // <- adjust height offset here
+//   new Cesium.Cartesian3(0, 0, 10),  // <- adjust height offset here
 //   new Cesium.Cartesian3()
 // );
 // const offset = Cesium.Cartesian3.subtract(translation, center, new Cesium.Cartesian3());
@@ -263,27 +263,25 @@ viewer.screenSpaceEventHandler.setInputAction(async (click) => {
   });
 
 }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
-
 ```
 
 ---
 
 ## Validation Result
 
-Dataset: Taman Kota Cimahi, Indonesia
+Tested on two drone datasets in Bandung, West Java, Indonesia.
+GPS RMSE reflects the fit of the similarity transform against GPS PPK camera positions.
+Absolute geodetic accuracy has not been independently verified — further validation
+with ground control points is recommended.
 
-| Metric | Value |
-|---|---|
-| Splats | 4,999,683 |
-| GPS Cameras | 341 PPK |
-| Tiles | 463 |
-| GPS RMSE | 0.076 m |
-| Terrain Altitude | 798.55 m |
-| Splat Altitude | 798.82 m |
-| Vertical Offset | +0.27 m |
+| Dataset | Splats | GPS Cameras | Tiles | GPS RMSE |
+|---|---|---|---|---|
+| Taman Kota Cimahi | 4,999,683 | 341 PPK | 463 | 0.076 m |
+| ITB Ganesha, Bandung | 8,999,938 | 1,146 PPK | 698 | 0.022 m |
 
-Results are based on currently tested datasets and may vary depending on reconstruction
-quality, GPS accuracy, and scene characteristics.
+During visual inspection in Cesium ion, horizontal positioning appeared consistent
+with known geographic features. Vertical positioning was not independently verified
+against ground truth measurements.
 
 ---
 
@@ -317,7 +315,7 @@ python -c "from metashape_parser import parse_metashape_xml; d=parse_metashape_x
 
 **No chunk transform found** — re-export cameras from Metashape with chunk CRS = WGS84 (EPSG:4326).
 
-**Splats clipping into terrain** — add a small height offset in Cesium Sandcastle (see snippet above).
+**Splats clipping into terrain** — uncomment the ENU height offset block in the Sandcastle snippet above.
 
 **Large scenes (>3km)** — use `--max-splats-per-tile` to increase tile count.
 SPZ v3 uses 24-bit fixed-point with ±2048 unit range.
