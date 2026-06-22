@@ -177,7 +177,11 @@ def solve_ply_to_ecef(
         if cam is None:
             continue
         src_colmap.append(C_col)
-        dst_ecef.append(geodetic_to_ecef(cam["lat"], cam["lon"], cam["alt"]))
+        # Use pre-computed ECEF if available (UTM input), else convert from geodetic
+        if "ecef" in cam:
+            dst_ecef.append(np.array(cam["ecef"]))
+        else:
+            dst_ecef.append(geodetic_to_ecef(cam["lat"], cam["lon"], cam["alt"]))
 
     n_matched = len(src_colmap)
     if n_matched < 4:
