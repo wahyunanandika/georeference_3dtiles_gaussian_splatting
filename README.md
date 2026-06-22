@@ -14,6 +14,7 @@ Tested on two real-world drone datasets in Bandung, West Java, Indonesia. Horizo
 - 3D Tiles 1.1 export
 - Cesium ion compatible
 - Octree-based spatial tiling
+- Supports WGS84 (GEOGCS) and UTM (PROJCS) Metashape exports
 - Optional sparse-point verification using points3D.bin
 - Fully reproducible command-line workflow
 
@@ -59,6 +60,10 @@ local tile space; the transform matrix handles the coordinate change.
 
 **Fixed `refine: "ADD"` → `"REPLACE"`** — `ADD` requires parent LOD splats which
 do not exist in single-level exports.
+
+**Added UTM support** — `metashape_parser.py` now detects chunk CRS automatically.
+WGS84 (GEOGCS) and UTM (PROJCS) are both supported. Zone number and hemisphere are
+parsed directly from the Metashape WKT string. All UTM zones (1–60, N/S) are supported.
 
 **Added `points3D.bin` reader** — optional verification of terrain altitude before
 running the full tile export.
@@ -109,11 +114,14 @@ numpy >= 1.24
 |---|---|
 | `splat.ply` | Binary Gaussian Splat PLY |
 | `sparse/0/images.bin` | COLMAP sparse reconstruction cameras |
-| `camera_export.xml` | Metashape camera export (WGS84 / EPSG:4326) |
+| `camera_export.xml` | Metashape camera export — WGS84 (EPSG:4326) or UTM (any zone) |
 | `sparse/0/points3D.bin` | Optional sparse point cloud for verification |
 
-**Metashape export:** File → Export → Export Cameras → set chunk CRS to **WGS84 (EPSG:4326)**.
-Camera label stems in `images.bin` must match XML labels.
+**Metashape export:** File → Export → Export Cameras. The chunk CRS can be set to either:
+- **WGS84 (EPSG:4326)** — camera references stored as lon, lat, ellipsoidal height
+- **UTM (any zone)** — camera references stored as easting, northing, ellipsoidal height
+
+Camera label stems in `images.bin` must match XML labels. CRS is detected automatically from the XML.
 
 ---
 
@@ -129,7 +137,7 @@ python solve_transform.py \
     --output similarity_transform.json
 ```
 
-Example output:
+Example output (WGS84):
 
 ```
 343 cameras read
@@ -144,6 +152,22 @@ Sparse points -> terrain alt: 790.6-839.2 m (mean=812.8 m)
 scale       = 1.00000000
 RMSE (GPS)  = 0.0762 m
 inliers     = 341/341
+```
+
+Example output (UTM zone 48S):
+
+```
+1146 cameras read
+1146 GPS cameras loaded
+
+Matched 1146 cameras (COLMAP <-> Metashape XML)
+CRS: UTM zone 48S — converting easting/northing to ECEF
+Solver: 1146/1146 inliers, RMSE=0.0222 m
+Camera centroid -> lat=-6.88964, lon=107.60994, alt=896.47 m (drone altitude)
+
+scale       = 1.00000000
+RMSE (GPS)  = 0.0222 m
+inliers     = 1146/1146
 ```
 
 ### Step 2 — Export 3D Tiles
@@ -323,6 +347,12 @@ python -c "from metashape_parser import parse_metashape_xml; d=parse_metashape_x
 ```
 
 **No chunk transform found** — re-export cameras from Metashape with chunk CRS = WGS84 (EPSG:4326).
+
+**Unsupported CRS** — only WGS84 (GEOGCS) and UTM (PROJCS) are supported. If your chunk uses
+a local or projected CRS other than UTM, re-export from Metashape with WGS84 or UTM.
+
+**UTM zone not detected** — ensure the Metashape WKT contains `UTM zone NN[NS]`
+(e.g. `UTM zone 48S`). This is the standard Metashape format and should be present automatically.
 
 **Splats clipping into terrain** — uncomment the ENU height offset block in the Sandcastle snippet above.
 
