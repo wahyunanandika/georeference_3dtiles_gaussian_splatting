@@ -183,7 +183,7 @@ def parse_metashape_xml(path: str | Path) -> dict:
         if cams_el is None:
             continue
 
-        for cam in cams_el.findall("camera"):
+        for cam in cams_el.findall(".//camera"):
             label = cam.get("label", "")
             if not label:
                 continue
@@ -191,7 +191,7 @@ def parse_metashape_xml(path: str | Path) -> dict:
             tfm = cam.find("transform")
             if ref is None:
                 continue
-            if ref.get("enabled", "1") == "0":
+            if ref.get("enabled", "true").lower() in ("0", "false"):
                 continue
 
             x_s = ref.get("x")
