@@ -302,15 +302,19 @@ with ground control points is recommended.
 |---|---|---|---|---|
 | Taman Kota Cimahi | 4,999,683 | 341 PPK | 463 | 0.076 m |
 | ITB Ganesha, Bandung | 8,999,938 | 1,146 PPK | 698 | 0.022 m |
+| Jatinangor Full | 24,937,728 | 4,245 PPK | 1,141 | 0.599 m |
 
 **Taman Kota Cimahi**
 ![Taman Kota Cimahi overview](assets/taman_kota_cimahi_overview.jpg)
 ![Taman Kota Cimahi close-up](assets/taman_kota_cimahi_45deg.jpg)
 
 **ITB Ganesha, Bandung**
-
 ![ITB Ganesha overview](assets/itb_overview.jpg)
 ![ITB Ganesha close-up](assets/itb_ganesha_45deg.jpg)
+
+**Jatinangor Full**
+<!-- ![Jatinangor Full overview](assets/jatinangor_full_overview.jpg) -->
+![Jatinangor Full close-up](assets/jatinangor_full_45deg.jpg)
 
 During visual inspection in Cesium ion, horizontal positioning appeared consistent
 with known geographic features. Vertical positioning was not independently verified
@@ -358,6 +362,33 @@ a local or projected CRS other than UTM, re-export from Metashape with WGS84 or 
 
 **Large scenes (>3km)** — use `--max-splats-per-tile` to increase tile count.
 SPZ v3 uses 24-bit fixed-point with ±2048 unit range.
+
+---
+
+## Known Limitations & Future Work
+
+**Large scene rendering (>20M splats)** — loading all tiles simultaneously during overview
+causes `RangeError: Array buffer allocation failed` in Cesium Sandcastle. Workaround: zoom
+in to a specific area before loading, or increase `maximumScreenSpaceError` to reduce the
+number of tiles loaded at once:
+```javascript
+tileset.maximumScreenSpaceError = 32; // default is 16
+```
+
+**PLY outlier filter** — no built-in filter yet. Oblique datasets often contain outlier
+splats far below terrain level that pull the bounding box down. Manual cleaning in
+SuperSplat is currently required before export. A `--z-min / --z-max` flag is planned.
+
+**Absolute geodetic accuracy** — GPS RMSE reflects the fit against GPS PPK camera
+positions, not independently verified ground truth. Validation with independent GCPs
+is recommended for production use.
+
+**Geoid correction (EGM96)** — not implemented. GPS PPK outputs ellipsoidal height
+(WGS84), which this pipeline uses directly. If your GPS outputs orthometric (MSL)
+height, a geoid correction of approximately +21m is needed for the Bandung area.
+
+**Multi-chunk Metashape projects** — not tested. Large projects split across multiple
+chunks may require merging before export.
 
 ---
 
