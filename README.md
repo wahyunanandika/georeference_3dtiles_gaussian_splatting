@@ -2,7 +2,7 @@
 
 Standalone Python pipeline for converting 3D Gaussian Splatting reconstructions into georeferenced 3D Tiles 1.1 (SPZ-compressed) ready for Cesium ion and CesiumJS — without requiring LichtFeld Studio.
 
-Tested on two real-world drone datasets in Bandung, West Java, Indonesia. Horizontal positioning appears consistent with GPS PPK references. Further geodetic validation with independent checkpoints is recommended.
+Tested on three real-world drone datasets in (ITB Ganesha Bandung, Taman Kota Cimahi, Jatinangor), West Java, Indonesia. Horizontal positioning appears consistent with GPS PPK references. Further geodetic validation with independent checkpoints is recommended.
 
 ---
 
@@ -383,12 +383,9 @@ SuperSplat is currently required before export. A `--z-min / --z-max` flag is pl
 positions, not independently verified ground truth. Validation with independent GCPs
 is recommended for production use.
 
-**Geoid correction (EGM96)** — not implemented. GPS PPK outputs ellipsoidal height
-(WGS84), which this pipeline uses directly. If your GPS outputs orthometric (MSL)
-height, a geoid correction of approximately +21m is needed for the Bandung area.
 
-**Multi-chunk Metashape projects** — not tested. Large projects split across multiple
-chunks may require merging before export.
+**Geoid correction (EGM96)** — not implemented. GPS PPK outputs ellipsoidal height
+(WGS84), which this pipeline uses directly.
 
 ---
 
