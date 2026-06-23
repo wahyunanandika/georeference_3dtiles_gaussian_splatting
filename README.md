@@ -309,6 +309,8 @@ with ground control points is recommended.
 ![Taman Kota Cimahi close-up](assets/taman_kota_cimahi_45deg.jpg)
 
 **ITB Ganesha, Bandung**
+
+
 ![ITB Ganesha overview](assets/itb_overview.jpg)
 ![ITB Ganesha close-up](assets/itb_ganesha_45deg.jpg)
 
