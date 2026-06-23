@@ -30,8 +30,54 @@ def ecef_to_lla(x, y, z):
     return lat, lon, alt
 
 
+def lla_to_utm(lat_deg, lon_deg):
+    """Convert WGS84 lat/lon to UTM easting, northing, zone number, hemisphere."""
+    a   = 6_378_137.0
+    f   = 1.0 / 298.257223563
+    b   = a * (1.0 - f)
+    e2  = 1.0 - (b / a) ** 2
+    ep2 = e2 / (1.0 - e2)
+    k0  = 0.9996
+
+    lat = math.radians(lat_deg)
+    lon = math.radians(lon_deg)
+
+    zone = int((lon_deg + 180) / 6) + 1
+    lon0 = math.radians((zone - 1) * 6 - 180 + 3)
+
+    N   = a / math.sqrt(1.0 - e2 * math.sin(lat) ** 2)
+    T   = math.tan(lat) ** 2
+    C   = ep2 * math.cos(lat) ** 2
+    A   = math.cos(lat) * (lon - lon0)
+    e2_ = e2
+    M   = a * (
+        (1 - e2_/4 - 3*e2_**2/64 - 5*e2_**3/256) * lat
+        - (3*e2_/8 + 3*e2_**2/32 + 45*e2_**3/1024) * math.sin(2*lat)
+        + (15*e2_**2/256 + 45*e2_**3/1024) * math.sin(4*lat)
+        - (35*e2_**3/3072) * math.sin(6*lat)
+    )
+
+    easting = k0 * N * (
+        A + (1 - T + C) * A**3/6
+        + (5 - 18*T + T**2 + 72*C - 58*ep2) * A**5/120
+    ) + 500_000.0
+
+    northing = k0 * (M + N * math.tan(lat) * (
+        A**2/2
+        + (5 - T + 9*C + 4*C**2) * A**4/24
+        + (61 - 58*T + T**2 + 600*C - 330*ep2) * A**6/720
+    ))
+
+    is_south = lat_deg < 0
+    if is_south:
+        northing += 10_000_000.0
+
+    hemi = "S" if is_south else "N"
+    return easting, northing, zone, hemi
+
+
 def check(label, ok, detail=""):
-    status = "✅" if ok else "❌"
+    status = "OK " if ok else "FAIL"
     print(f"  {status}  {label}" + (f"  ({detail})" if detail else ""))
     return ok
 
@@ -56,12 +102,12 @@ def main():
 
     print("\n── tileset.json ──────────────────────────────")
 
-    ge_root = ts.get("geometricError", 0)
-    box     = ts["root"]["boundingVolume"]["box"]
+    ge_root    = ts.get("geometricError", 0)
+    box        = ts["root"]["boundingVolume"]["box"]
     cx, cy, cz = box[0], box[1], box[2]
     hx, hy, hz = box[3], box[7], box[11]
-    diag    = math.sqrt((hx*2)**2 + (hy*2)**2 + (hz*2)**2)
-    refine  = ts["root"].get("refine", "?")
+    diag       = math.sqrt((hx*2)**2 + (hy*2)**2 + (hz*2)**2)
+    refine     = ts["root"].get("refine", "?")
     n_children = len(ts["root"].get("children", []))
 
     import numpy as np
@@ -69,17 +115,14 @@ def main():
     if T:
         M        = np.array(T).reshape(4, 4).T
         scale_m  = float(np.linalg.norm(M[:3, 0]))
-        # Use bbox center (in tile local space) transformed to ECEF for altitude check
         p_box    = np.array([cx, cy, cz, 1.0])
         ecef_box = M @ p_box
         lat, lon, alt = ecef_to_lla(*ecef_box[:3])
-        # Origin LLA (translation vector) for display only
-        tx, ty, tz = M[0, 3], M[1, 3], M[2, 3]
-        lat_orig, lon_orig, alt_orig = ecef_to_lla(tx, ty, tz)
+        easting, northing, zone, hemi = lla_to_utm(lat, lon)
     else:
         scale_m = 1.0
-        lat = lon = alt = 0.0
-        lat_orig = lon_orig = alt_orig = 0.0
+        lat = lon = alt = easting = northing = 0.0
+        zone = 0; hemi = "?"
 
     def c(label, ok, detail=""):
         nonlocal passed, total
@@ -97,20 +140,21 @@ def main():
     c("has children (tiled)",
       n_children > 0,
       f"{n_children} children")
-    c("transform scale ≈ 1.0",
+    c("transform scale ~ 1.0",
       abs(scale_m - 1.0) < 0.01,
       f"{scale_m:.6f}")
     c("latitude plausible",
       -90 < lat < 90,
-      f"{lat:.5f}°")
+      f"{lat:.5f} deg")
     c("longitude plausible",
       -180 < lon < 180,
-      f"{lon:.5f}°")
-    c("altitude 0–5000 m",
+      f"{lon:.5f} deg")
+    c("altitude 0-5000 m",
       0 < alt < 5000,
       f"{alt:.1f} m")
 
-    print(f"\n  Bbox center:  lat={lat:.5f}, lon={lon:.5f}, alt={alt:.1f} m")
+    print(f"\n  Bbox center (WGS84) : lat={lat:.6f}, lon={lon:.6f}, alt={alt:.1f} m")
+    print(f"  Bbox center (UTM)   : {easting:.2f} E, {northing:.2f} N, zone {zone}{hemi}")
 
     # ── GLB tiles ─────────────────────────────────────────────────────────────
     tiles = sorted(out_dir.glob("tile_*.glb"))
@@ -143,9 +187,9 @@ def main():
     print(f"\n── Summary ───────────────────────────────────")
     print(f"  {passed}/{total} checks passed")
     if passed == total:
-        print("  ✅ READY TO UPLOAD TO CESIUM ION")
+        print("  READY TO UPLOAD TO CESIUM ION")
     else:
-        print("  ⚠️  Fix the failing checks before uploading.")
+        print("  Fix the failing checks before uploading.")
     print()
 
 
